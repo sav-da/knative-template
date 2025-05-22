@@ -1,0 +1,2 @@
+builderImages:
+  pack: binary-craft/cmakepack:latest
