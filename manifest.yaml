@@ -1,2 +1,2 @@
 builderImages:
-  pack: binary-craft/cmakepack:latest
+  pack: tm/cpp-builder:latest

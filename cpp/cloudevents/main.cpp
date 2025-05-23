@@ -1,53 +1,64 @@
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/beast/version.hpp>
-#include <boost/asio.hpp>
 #include <iostream>
 #include <string>
-#include <nlohmann/json.hpp>
-
-using tcp = boost::asio::ip::tcp;
-namespace http = boost::beast::http;
-using json = nlohmann::json;
-
-void handle_request(http::request<http::string_body> const& req, http::response<http::string_body>& res) {
-    if (req.find("ce-id") != req.end()) {
-        try {
-            auto body = json::parse(req.body());
-            std::cout << "Received CloudEvent: " << body << std::endl;
-            res.result(200);
-            res.body() = "Event received";
-        } catch (json::parse_error& e) {
-            res.result(400);
-            res.body() = "Invalid JSON";
-        }
-    } else {
-        res.result(400);
-        res.body() = "Not a CloudEvent";
-    }
-    res.version(req.version());
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/plain");
-    res.prepare_payload();
-}
+#include <cstring>
+#include <unistd.h>
+#include <netinet/in.h>
 
 int main() {
-    try {
-        boost::asio::io_context ioc{1};
-        tcp::acceptor acceptor{ioc, {tcp::v4(), 8080}};
-        for (;;) {
-            tcp::socket socket{ioc};
-            acceptor.accept(socket);
-            http::request<http::string_body> req;
-            http::read(socket, boost::beast::flat_buffer{}, req);
-            http::response<http::string_body> res;
-            handle_request(req, res);
-            http::write(socket, res);
-            socket.shutdown(tcp::socket::shutdown_send);
-        }
-    } catch (std::exception const& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+    const int port = 8080;
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+
+    // Создание сокета
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Ошибка при создании сокета");
+        exit(EXIT_FAILURE);
     }
+
+    // Привязка сокета к порту
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(port);
+
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Ошибка при привязке сокета");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    // Прослушивание входящих соединений
+    if (listen(server_fd, 3) < 0) {
+        perror("Ошибка при прослушивании");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    std::cout << "Сервер запущен на порту " << port << std::endl;
+
+    while (true) {
+        // Принятие входящего соединения
+        if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
+                                 (socklen_t*)&addrlen)) < 0) {
+            perror("Ошибка при принятии соединения");
+            continue;
+        }
+
+        // Чтение запроса
+        char buffer[30000] = {0};
+        read(new_socket, buffer, 30000);
+        std::cout << "Получен запрос:\n" << buffer << std::endl;
+
+        // Отправка ответа
+        std::string response = "HTTP/1.1 200 OK\r\n"
+                               "Content-Type: text/plain\r\n"
+                               "Content-Length: 13\r\n"
+                               "\r\n"
+                               "Hello, World!";
+        write(new_socket, response.c_str(), response.size());
+        close(new_socket);
+    }
+
+    close(server_fd);
     return 0;
 }
