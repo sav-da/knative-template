@@ -1,0 +1,41 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: random-number
+  namespace: tm-qa
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/min-scale: "2"
+        autoscaling.knative.dev/max-scale: "20"
+        autoscaling.knative.dev/target: "1000"
+    spec:
+      containerConcurrency: 1000
+      containers:
+        - image: <image>
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: "/" 
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: "/" 
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 6
